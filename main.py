@@ -1,5 +1,9 @@
 import pygame
 import sys
+import random
+from item import Item
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 초기화
 pygame.init()
@@ -7,7 +11,7 @@ pygame.init()
 # 화면 설정
 WIDTH, HEIGHT = 800, 600
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("광클 레이싱")
+pygame.display.set_caption("광클 레이싱 with 아이템")
 
 # 색상
 WHITE = (255, 255, 255)
@@ -15,69 +19,107 @@ GRAY = (200, 200, 200)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 
-# FPS 설정
+# FPS
 FPS = 60
 clock = pygame.time.Clock()
 
-# 트랙 정보
+# 트랙 설정
 TRACK_COUNT = 4
 TRACK_HEIGHT = HEIGHT // TRACK_COUNT
 
-# 차 정보
+# 차량 설정
 CAR_WIDTH, CAR_HEIGHT = 60, 40
 START_X = 50
+FINISH_LINE_X = WIDTH - 100
 
-# 플레이어 키 매핑
+# 플레이어 설정
 player_keys = [pygame.K_d, pygame.K_k, pygame.K_RIGHT, pygame.K_l]
 CAR_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
 
-# 차량 이미지 로드 (나중에 이미지 경로 추가)
-# car_images = [pygame.image.load("car1.png"), pygame.image.load("car2.png"), ...]
-# 이미지 크기 조정 예시:
-# car_images = [pygame.transform.scale(img, (CAR_WIDTH, CAR_HEIGHT)) for img in car_images]
+# 아이템 설정
+ITEM_NAMES = ["Bomb", "Booster", "Shell", "Ice"]
+ITEM_BOX_SIZE = 30
 
+# 아이템 이미지 불러오기
+item_images = {
+    "Bomb": pygame.transform.scale(pygame.image.load("assets/bomb.jpg"), (ITEM_BOX_SIZE, ITEM_BOX_SIZE)),
+    "Booster": pygame.transform.scale(pygame.image.load("assets/booster.png"), (ITEM_BOX_SIZE, ITEM_BOX_SIZE)),
+    "Shell": pygame.transform.scale(pygame.image.load("assets/shell.png"), (ITEM_BOX_SIZE, ITEM_BOX_SIZE)),
+    "Ice": pygame.transform.scale(pygame.image.load("assets/ice.jpg"), (ITEM_BOX_SIZE, ITEM_BOX_SIZE)),
+}
+
+# 게임 초기화 함수
 def reset_game():
-    global cars, winner, game_over
-    cars = []
+    global players, winner, game_over, item_boxes
+    players = []
     for i in range(TRACK_COUNT):
-        # 트랙 바로 위에 플레이어 배치
-        track_y = TRACK_HEIGHT * (i + 1)
-        car_y = track_y - CAR_HEIGHT  # 차가 트랙 라인 위에 닿도록 배치
-        car = pygame.Rect(START_X, car_y, CAR_WIDTH, CAR_HEIGHT)
-        cars.append(car)
+        y = TRACK_HEIGHT * (i + 1) - CAR_HEIGHT
+        car_rect = pygame.Rect(START_X, y, CAR_WIDTH, CAR_HEIGHT)
+        players.append({
+            "rect": car_rect,
+            "color": CAR_COLORS[i],
+            "stun": 0,
+            "boost": 0
+        })
     winner = None
     game_over = False
+
+    # 아이템 박스 생성
+    item_boxes = []
+    for i in range(TRACK_COUNT):
+        x = random.randint(300, 600)
+        y = TRACK_HEIGHT * (i + 1) - ITEM_BOX_SIZE
+        item_name = random.choice(ITEM_NAMES)
+        box_rect = pygame.Rect(x, y, ITEM_BOX_SIZE, ITEM_BOX_SIZE)
+        item_boxes.append({
+            "rect": box_rect,
+            "name": item_name
+        })
 
 reset_game()
 
 # 골라인
-FINISH_LINE_X = WIDTH - 100
 finish_line = pygame.Rect(FINISH_LINE_X, 0, 20, HEIGHT)
 
-# 메인 루프
+# 게임 루프
 running = True
 while running:
     clock.tick(FPS)
     WIN.fill(WHITE)
 
-    # 이벤트 처리
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
-        # 키 입력 처리 (광클 방식)
         if event.type == pygame.KEYDOWN:
-            if game_over:
-                if event.key == pygame.K_r:
-                    reset_game()
-            else:
+            if game_over and event.key == pygame.K_r:
+                reset_game()
+            elif not game_over:
                 for idx, key in enumerate(player_keys):
-                    if event.key == key:
-                        cars[idx].x += 10
-                        # 승리 판정
-                        if cars[idx].right >= FINISH_LINE_X:
+                    p = players[idx]
+                    if event.key == key and p["stun"] == 0:
+                        speed = 10 * (2 if p["boost"] > 0 else 1)
+                        p["rect"].x += speed
+                        if p["rect"].right >= FINISH_LINE_X:
                             winner = idx + 1
                             game_over = True
+
+    # 상태 업데이트
+    for p in players:
+        if p["stun"] > 0:
+            p["stun"] -= 1
+        if p["boost"] > 0:
+            p["boost"] -= 1
+
+    # 아이템 충돌 체크 및 자동 발동
+    for idx, p in enumerate(players):
+        for box in item_boxes:
+            if p["rect"].colliderect(box["rect"]):
+                item = Item(box["name"])
+                print(f"Player {idx+1} 아이템 획득: {box['name']}")
+                item.activate(idx, players)
+                item_boxes.remove(box)
+                break
 
     # 트랙 그리기
     for i in range(TRACK_COUNT):
@@ -85,15 +127,20 @@ while running:
         pygame.draw.line(WIN, GRAY, (0, y), (WIDTH, y), 4)
 
     # 차량 그리기
-    for idx, car in enumerate(cars):
-        # 나중에 이미지로 대체
-        # WIN.blit(car_images[idx], (car.x, car.y))
-        pygame.draw.rect(WIN, CAR_COLORS[idx], car)
+    for p in players:
+        pygame.draw.rect(WIN, p["color"], p["rect"])
+        if p["stun"] > 0:
+            pygame.draw.rect(WIN, RED, p["rect"], 4)  # stun일 때 빨간 테두리
 
-    # 골라인 그리기
+    # 아이템 박스 그리기
+    for box in item_boxes:
+        img = item_images[box["name"]]
+        WIN.blit(img, box["rect"].topleft)
+
+    # 골라인
     pygame.draw.rect(WIN, BLACK, finish_line)
 
-    # 승자 표시
+    # 승자 메시지
     if game_over:
         font = pygame.font.SysFont(None, 60)
         text = font.render(f"Player {winner} Wins! Press R to Restart", True, RED)
