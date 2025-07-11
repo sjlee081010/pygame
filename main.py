@@ -30,7 +30,7 @@ CAR_WIDTH, CAR_HEIGHT = 60, 40
 START_X = 50
 
 # 플레이어 키 매핑
-player_keys = [pygame.K_d, pygame.K_k, pygame.K_RIGHT, pygame.K_l]
+player_keys = [pygame.K_q, pygame.K_p, pygame.K_z, pygame.K_m]
 CAR_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
 
 # 골 이펙트 관련 변수
@@ -53,14 +53,39 @@ def reset_game():
 def start_screen():
     start_button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT//2 + 50, 200, 70)
     while True:
-        WIN.fill(WHITE)
-        title_surf = BIG_FONT.render("GR", True, BLACK)
+        WIN.fill(BLACK)
+        title_surf = BIG_FONT.render("GR", True, WHITE)
         WIN.blit(title_surf, (WIDTH//2 - title_surf.get_width()//2, HEIGHT//3))
 
+        # START 버튼
         pygame.draw.rect(WIN, GREEN, start_button_rect)
         start_text = FONT.render("START", True, WHITE)
         WIN.blit(start_text, (start_button_rect.centerx - start_text.get_width()//2,
                               start_button_rect.centery - start_text.get_height()//2))
+
+        # 아래에 키 설명 텍스트 가로로 추가
+        instruction_texts = [
+            "P1: Q",
+            "P2: P",
+            "P3: Z",
+            "P4: M"
+        ]
+        spacing = 40  # 각 텍스트 사이 간격
+        total_width = 0
+        text_surfs = []
+
+        for text in instruction_texts:
+            surf = FONT.render(text, True, WHITE)
+            text_surfs.append(surf)
+            total_width += surf.get_width() + spacing
+
+        total_width -= spacing  # 마지막 간격 제거
+        start_x = WIDTH // 2 - total_width // 2
+        y = start_button_rect.bottom + 40
+
+        for surf in text_surfs:
+            WIN.blit(surf, (start_x, y))
+            start_x += surf.get_width() + spacing
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -74,36 +99,53 @@ def start_screen():
         clock.tick(30)
 
 def show_podium_screen():
+    # 순위에 따라 색상 인덱스 정렬
     ranked_cars = sorted(enumerate(cars), key=lambda x: -x[1].x)
-    rankings = [index for index, _ in ranked_cars]
+    rankings = [index for index, _ in ranked_cars]  # 플레이어 인덱스 순위
 
     while True:
         WIN.fill(BLACK)
-        info_text = FONT.render("Press R to Restart", True, WHITE)
-        WIN.blit(info_text, (WIDTH // 2 - info_text.get_width() // 2, 20))
 
-        podium_width = 100
-        podium_heights = {1: 200, 2: 150, 3: 100, 4: 0}
+        # 안내 문구 - 상단에서 살짝 여백 두고
+        info_text = FONT.render("Press R to Restart", True, WHITE)
+        WIN.blit(info_text, (WIDTH // 2 - info_text.get_width() // 2, 80))
+
+        # 단상 크기 키우기
+        podium_width = 120
+        podium_heights = {
+            1: 240,
+            2: 180,
+            3: 120,
+            4: 0
+        }
+
         total_podiums = 4
         total_width = podium_width * total_podiums
         start_x = WIDTH // 2 - total_width // 2
-        base_y = HEIGHT * 3 // 4
+        base_y = HEIGHT * 4 // 5
 
         draw_order = [3, 1, 2, 4]
 
         for i, rank in enumerate(draw_order):
             if rank > len(rankings):
                 continue
+
             player_idx = rankings[rank - 1]
             color = CAR_COLORS[player_idx]
             height = podium_heights[rank]
+
             x = start_x + i * podium_width
             y = base_y - height
 
+            # 단상
             if height > 0:
                 pygame.draw.rect(WIN, GRAY, (x, y, podium_width, height))
-            pygame.draw.rect(WIN, color, (x + 20, y - 40, 60, 40))
-            place_text = FONT.render(str(rank), True, BLACK)
+
+            # 색상 박스 (플레이어 색)
+            pygame.draw.rect(WIN, color, (x + 20, y - 50, 80, 50))
+
+            # 순위 숫자
+            place_text = FONT.render(f"{rank}", True, BLACK)
             WIN.blit(place_text, (x + podium_width // 2 - place_text.get_width() // 2, y + 10))
 
         for event in pygame.event.get():
@@ -117,12 +159,56 @@ def show_podium_screen():
         pygame.display.update()
         clock.tick(30)
 
+def blur_current_screen(scale_factor=0.1):
+    screen_copy = WIN.copy()
+    small = pygame.transform.smoothscale(screen_copy,
+                (int(WIDTH * scale_factor), int(HEIGHT * scale_factor)))
+    blurred = pygame.transform.smoothscale(small, (WIDTH, HEIGHT))
+    return blurred
+
+def countdown():
+    finish_line_x = WIDTH - 100
+    finish_line = pygame.Rect(finish_line_x, 0, 20, HEIGHT)
+
+    for num in ["3", "2", "1"]:
+        # 1. 트랙, 차량, 골라인을 메모리 상에만 그림
+        WIN.fill(BLACK)
+
+        for i in range(TRACK_COUNT):
+            y = TRACK_HEIGHT * (i + 1)
+            pygame.draw.line(WIN, GRAY, (0, y), (WIDTH, y), 4)
+
+        for idx, car in enumerate(cars):
+            pygame.draw.rect(WIN, CAR_COLORS[idx], car)
+
+        pygame.draw.rect(WIN, WHITE, finish_line)
+
+        # 2. 블러 처리 (표시하지 않음)
+        blurred = blur_current_screen()
+
+        # 3. 블러된 화면을 다시 WIN에 덮어쓰기
+        WIN.blit(blurred, (0, 0))
+
+        # 4. 카운트다운 텍스트
+        count_text = BIG_FONT.render(num, True, WHITE)
+        WIN.blit(count_text, (
+            WIDTH // 2 - count_text.get_width() // 2,
+            HEIGHT // 2 - count_text.get_height() // 2)
+        )
+
+        # 5. 이제 최종 화면 한 번만 업데이트
+        pygame.display.update()
+        pygame.time.delay(1000)
+
 def game_loop():
     reset_game()
     finish_line_x = WIDTH - 100
     finish_line = pygame.Rect(finish_line_x, 0, 20, HEIGHT)
 
-    global game_over, winner, podium_show_time, flash_start_time
+    global game_over, winner, podium_show_time
+    
+    countdown()
+
 
     while True:
         clock.tick(FPS)
