@@ -4,7 +4,7 @@ import time
 
 pygame.init()
 
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 1000, 600
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("GR - 광클 레이싱")
 
@@ -37,18 +37,40 @@ CAR_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
 FLASH_DURATION = 3  # 초
 FLASH_INTERVAL = 0.2  # 깜빡이는 간격
 
+background_img = pygame.image.load("./img/background.png")
+background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+
+car_images = []
+car_image_files = ["./img/car_red.png", "./img/car_green.png", "./img/car_blue.png", "./img/car_yellow.png"]
+
+for filename in car_image_files:
+    img = pygame.image.load(filename).convert_alpha()
+    
+    # 비율 유지하며 CAR_HEIGHT에 맞춤
+    original_width = img.get_width()
+    original_height = img.get_height()
+    scale_factor = CAR_HEIGHT / original_height
+    new_width = int(original_width * scale_factor)
+    new_height = CAR_HEIGHT
+    
+    # 크기 조정
+    img = pygame.transform.smoothscale(img, (new_width, new_height))
+    car_images.append(img)
+
 def reset_game():
-    global cars, winner, game_over, podium_show_time, flash_start_time
+    global cars, winner, game_over, podium_show_time
     cars = []
     for i in range(TRACK_COUNT):
         track_y = TRACK_HEIGHT * (i + 1)
         car_y = track_y - CAR_HEIGHT
-        car = pygame.Rect(START_X, car_y, CAR_WIDTH, CAR_HEIGHT)
+        # 이미지의 폭을 가져옴
+        img_width = car_images[i].get_width()
+        img_height = car_images[i].get_height()
+        car = pygame.Rect(START_X, car_y, img_width, img_height)
         cars.append(car)
     winner = None
     game_over = False
     podium_show_time = None
-    flash_start_time = None  # 반짝이기 시간 초기화
 
 def start_screen():
     start_button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT//2 + 50, 200, 70)
@@ -131,7 +153,9 @@ def show_podium_screen():
                 continue
 
             player_idx = rankings[rank - 1]
-            color = CAR_COLORS[player_idx]
+            img = car_images[player_idx]  # 자동차 이미지
+            img_width = img.get_width()
+            img_height = img.get_height()
             height = podium_heights[rank]
 
             x = start_x + i * podium_width
@@ -141,8 +165,10 @@ def show_podium_screen():
             if height > 0:
                 pygame.draw.rect(WIN, GRAY, (x, y, podium_width, height))
 
-            # 색상 박스 (플레이어 색)
-            pygame.draw.rect(WIN, color, (x + 20, y - 50, 80, 50))
+            # 자동차 이미지 (단상 위 중앙에 배치)
+            img_x = x + (podium_width // 2) - (img_width // 2)
+            img_y = y - img_height
+            WIN.blit(img, (img_x, img_y))
 
             # 순위 숫자
             place_text = FONT.render(f"{rank}", True, BLACK)
@@ -172,14 +198,14 @@ def countdown():
 
     for num in ["3", "2", "1"]:
         # 1. 트랙, 차량, 골라인을 메모리 상에만 그림
-        WIN.fill(BLACK)
+        WIN.blit(background_img, (0, 0))
 
         for i in range(TRACK_COUNT):
             y = TRACK_HEIGHT * (i + 1)
             pygame.draw.line(WIN, GRAY, (0, y), (WIDTH, y), 4)
 
         for idx, car in enumerate(cars):
-            pygame.draw.rect(WIN, CAR_COLORS[idx], car)
+            WIN.blit(car_images[idx], (car.x, car.y))
 
         pygame.draw.rect(WIN, WHITE, finish_line)
 
@@ -212,7 +238,7 @@ def game_loop():
 
     while True:
         clock.tick(FPS)
-        WIN.fill(BLACK)
+        WIN.blit(background_img, (0, 0))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -236,7 +262,7 @@ def game_loop():
 
         # 차량 그리기
         for idx, car in enumerate(cars):
-            pygame.draw.rect(WIN, CAR_COLORS[idx], car)
+            WIN.blit(car_images[idx], (car.x, car.y))
 
             # 골 이펙트: 골인한 자동차에 흰색 테두리 반짝임
             if game_over and (idx + 1) == winner:
@@ -246,6 +272,11 @@ def game_loop():
 
         # 골라인 그리기
         pygame.draw.rect(WIN, WHITE, finish_line)
+        car_img_width = car_images[idx].get_width()
+        if cars[idx].x + car_img_width >= finish_line_x:
+            winner = idx + 1
+            game_over = True
+            podium_show_time = time.time()
 
         if game_over:
             if winner is not None:
