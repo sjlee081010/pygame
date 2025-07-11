@@ -197,34 +197,36 @@ def countdown():
     finish_line = pygame.Rect(finish_line_x, 0, 20, HEIGHT)
 
     for num in ["3", "2", "1"]:
-        # 1. 트랙, 차량, 골라인을 메모리 상에만 그림
-        WIN.blit(background_img, (0, 0))
+        start_time = time.time()
+        while time.time() - start_time < 1:  # 1초 동안 루프
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                # 키나 마우스 이벤트 무시 (이벤트만 처리해서 쌓이지 않도록)
 
-        for i in range(TRACK_COUNT):
-            y = TRACK_HEIGHT * (i + 1)
-            pygame.draw.line(WIN, GRAY, (0, y), (WIDTH, y), 4)
+            WIN.blit(background_img, (0, 0))
 
-        for idx, car in enumerate(cars):
-            WIN.blit(car_images[idx], (car.x, car.y))
+            for i in range(TRACK_COUNT):
+                y = TRACK_HEIGHT * (i + 1)
+                pygame.draw.line(WIN, GRAY, (0, y), (WIDTH, y), 4)
 
-        pygame.draw.rect(WIN, WHITE, finish_line)
+            for idx, car in enumerate(cars):
+                WIN.blit(car_images[idx], (car.x, car.y))
 
-        # 2. 블러 처리 (표시하지 않음)
-        blurred = blur_current_screen()
+            pygame.draw.rect(WIN, WHITE, finish_line)
 
-        # 3. 블러된 화면을 다시 WIN에 덮어쓰기
-        WIN.blit(blurred, (0, 0))
+            blurred = blur_current_screen()
+            WIN.blit(blurred, (0, 0))
 
-        # 4. 카운트다운 텍스트
-        count_text = BIG_FONT.render(num, True, WHITE)
-        WIN.blit(count_text, (
-            WIDTH // 2 - count_text.get_width() // 2,
-            HEIGHT // 2 - count_text.get_height() // 2)
-        )
+            count_text = BIG_FONT.render(num, True, WHITE)
+            WIN.blit(count_text, (
+                WIDTH // 2 - count_text.get_width() // 2,
+                HEIGHT // 2 - count_text.get_height() // 2)
+            )
 
-        # 5. 이제 최종 화면 한 번만 업데이트
-        pygame.display.update()
-        pygame.time.delay(1000)
+            pygame.display.update()
+            clock.tick(FPS)
 
 def game_loop():
     reset_game()
@@ -232,9 +234,13 @@ def game_loop():
     finish_line = pygame.Rect(finish_line_x, 0, 20, HEIGHT)
 
     global game_over, winner, podium_show_time
-    
+
     countdown()
 
+    game_started = False
+    flash_start_time = None
+
+    start_time = time.time()
 
     while True:
         clock.tick(FPS)
@@ -245,7 +251,12 @@ def game_loop():
                 pygame.quit()
                 sys.exit()
 
-            if event.type == pygame.KEYDOWN and not game_over:
+            # 카운트다운 끝나고 0.3초 후에 게임 시작 상태로 변경
+            if not game_started:
+                if time.time() - start_time > 0.3:
+                    game_started = True
+
+            if event.type == pygame.KEYDOWN and game_started and not game_over:
                 for idx, key in enumerate(player_keys):
                     if event.key == key:
                         cars[idx].x += 10
